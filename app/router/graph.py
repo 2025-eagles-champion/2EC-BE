@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
-from typing import List, Optional
-from ..spark_processor import SparkProcessor
-from ..models import AddressStats, AnalyticsResponse
+from typing import Optional
+from spark_processor import SparkProcessor
+from models import AnalyticsResponse
+from datetime import date
 
 router = APIRouter(tags=["Graph"])
 
-# 의존성 주입을 위한 함수
 def get_spark_processor():
     processor = SparkProcessor()
     try:
@@ -19,17 +19,9 @@ async def get_all_nodes(
     processor: SparkProcessor = Depends(get_spark_processor)
 ):
     try:
-        # 주소별 통계 가져오기
         address_stats_df = processor.get_transaction_stats().limit(limit)
-        
-        # Pandas로 변환하여 반환
         address_stats = processor.get_data_as_pandas(address_stats_df).to_dict(orient="records")
-        
-        return AnalyticsResponse(
-            success=True,
-            data=address_stats,
-            message=f"Successfully retrieved {len(address_stats)} nodes"
-        )
+        return AnalyticsResponse(success=True, data=address_stats, message=f"Retrieved {len(address_stats)} nodes")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -39,29 +31,59 @@ async def get_node_details(
     processor: SparkProcessor = Depends(get_spark_processor)
 ):
     try:
-        # 특정 주소의 트랜잭션 데이터 가져오기
         df = processor.get_transfers_df()
-        
-        # 송신자 또는 수신자가 해당 주소인 경우 필터링
         node_transactions = df.filter(
             (df.from_address == address) | (df.to_address == address)
         ).limit(100)
-        
-        # 결과가 없는 경우 처리
         if node_transactions.count() == 0:
-            return AnalyticsResponse(
-                success=False,
-                data=[],
-                message=f"No transactions found for address {address}"
-            )
-        
-        # Pandas로 변환하여 반환
+            return AnalyticsResponse(success=False, data=[], message="No transactions found")
         transactions = processor.get_data_as_pandas(node_transactions).to_dict(orient="records")
+        return AnalyticsResponse(success=True, data=transactions, message=f"Retrieved {len(transactions)} transactions")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/graph/transactions", response_model=AnalyticsResponse)
+async def get_filtered_transactions(
+    start_date: Optional[date] = Query(None, description="시작 날짜 (YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="종료 날짜 (YYYY-MM-DD)"),
+    processor: SparkProcessor = Depends(get_spark_processor)
+):
+    try:
+        # 날짜 필터링 적용
+        df = processor.get_transfers_df(start_date=start_date, end_date=end_date)
+        
+        # 결과 처리
+        transactions = processor.get_data_as_pandas(df).to_dict(orient="records")
         
         return AnalyticsResponse(
             success=True,
             data=transactions,
-            message=f"Successfully retrieved {len(transactions)} transactions for {address}"
+            message=f"Found {len(transactions)} transactions between {start_date} and {end_date}"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@router.get("/graph/filter", response_model=AnalyticsResponse)
+async def get_filtered_transactions(
+    start_date: Optional[date] = Query(None, description="시작 날짜 (YYYY-MM-DD)"),
+    end_date: Optional[date] = Query(None, description="종료 날짜 (YYYY-MM-DD)"),
+    chain: Optional[str] = Query(None, description="체인 필터 (예: cosmos)"),
+    processor: SparkProcessor = Depends(get_spark_processor)
+):
+    try:
+        filtered_df = processor.get_transfers_df(
+            start_date=start_date, 
+            end_date=end_date,
+            chain_filter=chain
+        )
+        
+        transactions = processor.get_data_as_pandas(filtered_df).to_dict(orient="records")
+        
+        return AnalyticsResponse(
+            success=True,
+            data=transactions,
+            message=f"Found {len(transactions)} transactions matching criteria"
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
