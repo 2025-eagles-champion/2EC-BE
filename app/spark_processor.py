@@ -16,7 +16,7 @@ class SparkProcessor:
         df = self.spark.read \
             .option("header", "true") \
             .option("inferSchema", "true") \
-            .csv("파일경로/transfers.csv")
+            .csv("app/data/transfers_1613651332000_1615499822000.csv")
         
         # 타임스탬프를 날짜 형식으로 변환 (밀리초 → 초 → 날짜)
         df = df.withColumn(
