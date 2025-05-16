@@ -33,7 +33,7 @@ async def get_node_details(
     try:
         df = processor.get_transfers_df()
         node_transactions = df.filter(
-            (df.from_address == address) | (df.to_address == address)
+            (df.fromAddress == address) | (df.toAddress == address)
         ).limit(100)
         if node_transactions.count() == 0:
             return AnalyticsResponse(success=False, data=[], message="No transactions found")
@@ -87,3 +87,4 @@ async def get_filtered_transactions(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
