@@ -9,6 +9,8 @@ class SparkProcessor:
             .appName("TransferAnalysis") \
             .config("spark.executor.memory", "2g") \
             .config("spark.driver.memory", "2g") \
+            .config("spark.driver.bindAddress", "127.0.0.1") \
+            .config("spark.driver.host", "127.0.0.1") \
             .getOrCreate()
         self.data_path = os.path.join(os.path.dirname(__file__), "data")
 

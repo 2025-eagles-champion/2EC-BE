@@ -4,3 +4,4 @@ pydantic==1.10.7
 pyspark==3.4.0
 python-dotenv==1.0.0
 pandas==1.5.3
+numpy==1.23.5
