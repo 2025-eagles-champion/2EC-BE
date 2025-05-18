@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
-from spark_processor import SparkProcessor
-from models import AnalyticsResponse
+from app.spark_processor import SparkProcessor
+from app.models import AnalyticsResponse
 from datetime import date
 
 router = APIRouter(tags=["Graph"])

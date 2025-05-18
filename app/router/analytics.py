@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional
 from datetime import date
-from spark_processor import SparkProcessor
-from models import AnalyticsResponse, NodeWeightRequest, TopNodesResponse
+from app.spark_processor import SparkProcessor
+from app.models import AnalyticsResponse, NodeWeightRequest, TopNodesResponse
 
 router = APIRouter(tags=["Analytics"])
 

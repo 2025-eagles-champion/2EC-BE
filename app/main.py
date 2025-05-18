@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from router import graph, analytics
+from app.router import graph, analytics
 import os
 
 app = FastAPI(
