@@ -20,6 +20,9 @@ app.add_middleware(
 app.include_router(graph.router)
 app.include_router(analytics.router)
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 @app.get("/", tags=["Root"])
 async def root():
     return {
