@@ -269,30 +269,41 @@ class SparkProcessor:
         
         return top_nodes
 
-    def get_top_weighted_nodes(self, start_date=None, end_date=None, 
-                              batch_quant_weight=50.0, tx_count_weight=50.0, 
-                              tx_amount_weight=50.0, top_n=10):
+    def get_top_weighted_nodes(self, start_date=None, end_date=None,
+                            batch_quant_weight=50.0, tx_count_weight=50.0,
+                            tx_amount_weight=50.0, top_n=10):
         """기간 및 가중치 기반 상위 노드 선별"""
-        # 기간 필터링된 거래 데이터 가져오기
+
+        # 1. 원본 데이터에서 top_nodes 가져오기
         df = self.get_transfers_df(start_date=start_date, end_date=end_date)
-        
-        # 파생변수 계산
         features_df = self.calculate_derived_features(df)
-        
-        # 가중치 적용 및 상위 노드 선별
-        top_nodes = self.apply_weights_and_get_top_nodes(
-            features_df, 
-            batch_quant_weight, 
-            tx_count_weight, 
-            tx_amount_weight, 
+        top_nodes_df = self.apply_weights_and_get_top_nodes(
+            features_df,
+            batch_quant_weight,
+            tx_count_weight,
+            tx_amount_weight,
             top_n
         )
-        
-        # 상위 노드 관련 거래 가져오기
-        top_addresses = [row["address"] for row in top_nodes.collect()]
-        related_txs = df.filter(
-            (col("fromAddress").isin(top_addresses)) | 
+        top_nodes = top_nodes_df.collect()
+
+        # 2. 원본 데이터에서 related_transactions 가져오기
+        top_addresses = [row["address"] for row in top_nodes]
+        related_txs_df = df.filter(
+            (col("fromAddress").isin(top_addresses)) |
             (col("toAddress").isin(top_addresses))
         ).limit(100)  # 각 노드당 약 10개 거래로 제한
-        
-        return top_nodes, related_txs
+
+        # 3. top_nodes 가공 (예시: 주소 앞 5글자만 추출)
+        processed_top_nodes = [{
+            **node.asDict(),
+            "address": node["address"][:5]  # 주소 앞 5글자만 추출
+        } for node in top_nodes]
+
+        # 4. related_transactions 가공 (예시: txhash 앞 5글자만 추출)
+        related_txs = related_txs_df.collect()
+        processed_related_transactions = [{
+            **tx.asDict(),
+            "txhash": tx["txhash"][:5]  # txhash 앞 5글자만 추출
+        } for tx in related_txs]
+
+        return processed_top_nodes, processed_related_transactions
