@@ -244,12 +244,15 @@ class SparkProcessor:
         return top_nodes
 
     def get_top_weighted_nodes(self, start_date=None, end_date=None,
-                                batch_quant_weight=50.0, tx_count_weight=50.0,
-                                tx_amount_weight=50.0, top_n=10):
+                           batch_quant_weight=50.0, tx_count_weight=50.0,
+                           tx_amount_weight=50.0, top_n=10):
         """기간 및 가중치 기반 상위 노드 선별"""
-
         df = self.get_transfers_df(start_date=start_date, end_date=end_date)
+        
+        # 파생 변수 계산
         features_df = self.calculate_derived_features(df)
+        
+        # 가중치 적용 및 상위 노드 선별
         top_nodes_df = self.apply_weights_and_get_top_nodes(
             features_df,
             batch_quant_weight,
@@ -257,23 +260,133 @@ class SparkProcessor:
             tx_amount_weight,
             top_n
         )
-
-        top_nodes = [row.asDict() for row in top_nodes_df.collect()]
-
-        top_nodes_derived_features_df = features_df.join(
-            top_nodes_df.select("address"),
-            features_df["address"] == top_nodes_df["address"]
-        )
-        top_nodes_derived_features = [row.asDict() for row in top_nodes_derived_features_df.collect()]
-
-        top_addresses = [row["address"] for row in top_nodes]
+        
+        # 상위 노드 주소 목록 추출
+        top_addresses = [row["address"] for row in top_nodes_df.collect()]
+        
+        # 관련 트랜잭션 필터링 (top_k 노드들의 전후 1depth)
         related_txs_df = df.filter(
             (col("fromAddress").isin(top_addresses)) |
             (col("toAddress").isin(top_addresses))
         )
-        related_transactions = [row.asDict() for row in related_txs_df.collect()]
-
+        
+        # top_nodes 형식 맞추기 (필요한 필드 포함)
+        top_nodes_with_tx_info = related_txs_df.select(
+            "type", "txhash", "timestamp", "amount", "denom", "dpDenom",
+            "fromAddress", "toAddress", "fromChain", "fromChainId", "toChain", "toChainId"
+        ).distinct()
+        
+        # top_nodes_df와 조인하여 최종 점수와 티어 정보 추가
+        # 데이터프레임에 별칭 지정
+        top_nodes_df_alias = top_nodes_df.alias("tn")
+        top_nodes_with_tx_info_alias = top_nodes_with_tx_info.alias("tx")
+        
+        top_nodes_result_df = top_nodes_with_tx_info_alias.join(
+            top_nodes_df_alias,
+            (col("tx.fromAddress") == col("tn.address")) |
+            (col("tx.toAddress") == col("tn.address")),
+            "inner"
+        ).select(
+            col("tx.type"),
+            col("tx.txhash"),
+            col("tx.timestamp"),
+            col("tx.amount"),
+            col("tx.denom"),
+            col("tx.dpDenom"),
+            col("tx.fromAddress"),
+            col("tx.toAddress"),
+            col("tx.fromChain"),
+            col("tx.fromChainId"),
+            col("tx.toChain"),
+            col("tx.toChainId"),
+            col("tn.address"),
+            col("tn.final_score"),
+            col("tn.tier"),
+            col("tn.sent_tx_count"),
+            col("tn.recv_tx_count"),
+            col("tn.chain")
+        ).distinct()
+        
+        # related_transactions 형식 맞추기
+        related_transactions_df = related_txs_df.select(
+            "type", "txhash", "timestamp", "amount", "denom", "dpDenom",
+            "fromAddress", "toAddress", "fromChain", "fromChainId", "toChain", "toChainId"
+        ).distinct()
+        
+        # top_nodes_derived_features 형식 맞추기
+        # 데이터프레임에 별칭 지정
+        features_df_alias = features_df.alias("f")
+        
+        # 여기가 중요한 부분입니다. top_nodes_df에서 address, final_score, tier 컬럼을 모두 선택합니다.
+        top_nodes_df_alias2 = top_nodes_df.select("address", "final_score", "tier").alias("tn2")
+        
+        top_nodes_derived_features_df = features_df_alias.join(
+            top_nodes_df_alias2,
+            col("f.address") == col("tn2.address"),
+            "inner"
+        ).select(
+            col("f.address"),
+            col("f.sent_tx_count"),
+            col("f.sent_tx_amount"),
+            col("f.recv_tx_count"),
+            col("f.recv_tx_amount"),
+            col("f.hour_entropy"),
+            col("f.active_days_count"),
+            col("f.counterparty_count_sent"),
+            col("f.counterparty_count_recv"),
+            col("f.external_sent_tx_count"),
+            col("f.external_sent_tx_amount"),
+            col("f.external_recv_tx_count"),
+            col("f.external_recv_tx_amount"),
+            col("tn2.final_score"),
+            col("tn2.tier")
+        )
+        
+        # related_txs_derived_features 형식 맞추기
         related_txs_derived_features_df = self.calculate_derived_features(related_txs_df)
+        
+        # 가중치 적용 및 점수 계산
+        weighted_related_txs_df = self.apply_weights_and_get_top_nodes(
+            related_txs_derived_features_df,
+            batch_quant_weight,
+            tx_count_weight,
+            tx_amount_weight,
+            related_txs_derived_features_df.count()  # 모든 노드에 대해 계산
+        )
+        
+        # 별칭 지정
+        related_txs_derived_features_df_alias = related_txs_derived_features_df.alias("rtdf")
+        weighted_related_txs_df_alias = weighted_related_txs_df.alias("wrtdf")
+        
+        # final_score와 tier 추가
+        related_txs_derived_features_df = related_txs_derived_features_df_alias.join(
+            weighted_related_txs_df_alias,
+            col("rtdf.address") == col("wrtdf.address"),
+            "inner"
+        ).select(
+            col("rtdf.address"),
+            col("rtdf.sent_tx_count"),
+            col("rtdf.sent_tx_amount"),
+            col("rtdf.recv_tx_count"),
+            col("rtdf.recv_tx_amount"),
+            col("rtdf.hour_entropy"),
+            col("rtdf.active_days_count"),
+            col("rtdf.counterparty_count_sent"),
+            col("rtdf.counterparty_count_recv"),
+            col("rtdf.external_sent_tx_count"),
+            col("rtdf.external_sent_tx_amount"),
+            col("rtdf.external_recv_tx_count"),
+            col("rtdf.external_recv_tx_amount"),
+            col("wrtdf.final_score"),
+            col("wrtdf.tier")
+        )
+        
+        # 결과를 딕셔너리 리스트로 변환
+        top_nodes = [row.asDict() for row in top_nodes_result_df.collect()]
+        top_nodes_derived_features = [row.asDict() for row in top_nodes_derived_features_df.collect()]
+        related_transactions = [row.asDict() for row in related_transactions_df.collect()]
         related_txs_derived_features = [row.asDict() for row in related_txs_derived_features_df.collect()]
-
+        
         return top_nodes, top_nodes_derived_features, related_transactions, related_txs_derived_features
+
+

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends, Body
 from typing import Optional
 from datetime import date
 from spark_processor import SparkProcessor
-from models import AnalyticsResponse, NodeWeightRequest, TopNodesResponse, TopNodesDerivedFeaturesResponse, RelatedTransactionsResponse, RelatedTransactionsDerivedFeaturesResponse, NodeScore, Transaction
+from models import AnalyticsResponse, NodeWeightRequest, TopNodesResponse, TopNodesDerivedFeaturesResponse, RelatedTransactionsResponse, RelatedTransactionsDerivedFeaturesResponse, NodeScore, Transaction, DerivedFeatures
 from pydantic import ValidationError
 
 router = APIRouter(tags=["Analytics"])
@@ -60,7 +60,7 @@ async def get_top_weighted_nodes_route(
 
         try:
             top_nodes_derived_features_response = TopNodesDerivedFeaturesResponse(
-                nodes_derived_features=top_nodes_derived_features
+                nodes_derived_features=[DerivedFeatures(**feature) for feature in top_nodes_derived_features]
             )
         except ValidationError as e:
             print(f"Validation Error for TopNodesDerivedFeaturesResponse: {e}")
@@ -76,16 +76,16 @@ async def get_top_weighted_nodes_route(
 
         try:
             related_transactions_derived_features_response = RelatedTransactionsDerivedFeaturesResponse(
-                related_transactions_derived_features=related_txs_derived_features
+                related_transactions_derived_features=[DerivedFeatures(**feature) for feature in related_txs_derived_features]
             )
         except ValidationError as e:
             print(f"Validation Error for RelatedTransactionsDerivedFeaturesResponse: {e}")
             raise HTTPException(status_code=500, detail=f"Validation error in related_txs_derived_features: {e}")
 
-        # print(f"Top nodes: {top_nodes_response.nodes[0] if top_nodes_response.nodes else 'No nodes'}\n")
-        # print(f"Top nodes derived features: {top_nodes_derived_features_response.nodes_derived_features}\n")
-        # print(f"Related transactions: {related_transactions_response.related_transactions[0] if related_transactions_response.related_transactions else 'No transactions'}\n")
-        # print(f"Related transactions derived features: {related_transactions_derived_features_response.related_transactions_derived_features}\n")
+        print(f"Top nodes: {top_nodes_response.nodes[0] if top_nodes_response.nodes else 'No nodes'}\n")
+        print(f"Top nodes derived features: {top_nodes_derived_features_response.nodes_derived_features[0]}\n")
+        print(f"Related transactions: {related_transactions_response.related_transactions[0] if related_transactions_response.related_transactions else 'No transactions'}\n")
+        print(f"Related transactions derived features: {related_transactions_derived_features_response.related_transactions_derived_features[0]}\n")
         
         return AnalyticsResponse(
             success=True,

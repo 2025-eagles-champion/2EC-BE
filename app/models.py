@@ -46,18 +46,35 @@ class NodeScore(BaseModel):
     sent_tx_count: int
     recv_tx_count: int
 
+class DerivedFeatures(BaseModel):
+    address: str
+    sent_tx_count: int
+    sent_tx_amount: float
+    recv_tx_count: int
+    recv_tx_amount: float
+    hour_entropy: float
+    active_days_count: int
+    counterparty_count_sent: int
+    counterparty_count_recv: int
+    external_sent_tx_count: int
+    external_sent_tx_amount: float
+    external_recv_tx_count: int
+    external_recv_tx_amount: float
+    final_score: float
+    tier: str
 class TopNodesResponse(BaseModel):
     nodes: List[NodeScore]
     related_transactions: List[Transaction]
 
 class TopNodesDerivedFeaturesResponse(BaseModel):
-    nodes_derived_features: List[Dict[str, Any]]
+    nodes_derived_features: List[DerivedFeatures]
+
+class RelatedTransactionsDerivedFeaturesResponse(BaseModel):
+    related_transactions_derived_features: List[DerivedFeatures]
 
 class RelatedTransactionsResponse(BaseModel):
     related_transactions: List[Transaction]
 
-class RelatedTransactionsDerivedFeaturesResponse(BaseModel):
-    related_transactions_derived_features: List[Dict[str, Any]]
 
 class AnalyticsResponse(BaseModel):
     success: bool
@@ -66,3 +83,4 @@ class AnalyticsResponse(BaseModel):
     related_transactions: RelatedTransactionsResponse
     related_transactions_derived_features: RelatedTransactionsDerivedFeaturesResponse
     message: Optional[str] = None
+
